@@ -57,16 +57,36 @@ def main():
     parser.add_argument("--symbol", default="BTCUSDT")
     parser.add_argument("--interval", default="15m")
     parser.add_argument("--strategy", choices=list(STRATEGIES.keys()), required=True)
+    parser.add_argument("--capital", type=float, default=1000.0,
+                        help="Starting capital for the backtest")
     args = parser.parse_args()
 
     df = fetch_binance_klines(args.symbol, args.interval)
     strategy_fn = STRATEGIES[args.strategy]
     curve = strategy_fn(df)
 
-    plt.plot(curve.index, curve.values)
+    times = pd.to_datetime(df["close_time"].iloc[-len(curve):], unit="ms")
+    capital = args.capital + curve.values
+
+    plt.plot(times, capital, label="capital")
+
+    max_idx = capital.argmax()
+    min_idx = capital.argmin()
+    plt.scatter(times.iloc[max_idx], capital[max_idx], color="green", label="max")
+    plt.scatter(times.iloc[min_idx], capital[min_idx], color="orange", label="min")
+    plt.annotate(f"Max {capital[max_idx]:.2f}", (times.iloc[max_idx], capital[max_idx]))
+    plt.annotate(f"Min {capital[min_idx]:.2f}", (times.iloc[min_idx], capital[min_idx]))
+
+    if (capital <= 0).any():
+        bank_idx = (capital <= 0).argmax()
+        plt.axvline(times.iloc[bank_idx], color="red", linestyle="--")
+        plt.annotate("Bankrupt", (times.iloc[bank_idx], capital[bank_idx]),
+                     rotation=90, color="red")
+
     plt.title(f"{args.strategy} on {args.symbol}")
-    plt.xlabel("Steps")
-    plt.ylabel("PnL")
+    plt.xlabel("Time")
+    plt.ylabel("Capital")
+    plt.legend()
     plt.grid(True)
     plt.show()
 

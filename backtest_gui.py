@@ -2,20 +2,31 @@ import tkinter as tk
 from tkinter import ttk
 from backtest import fetch_binance_klines, STRATEGIES
 import matplotlib.pyplot as plt
+import pandas as pd
 
 
 def run_backtest():
     symbol = symbol_var.get()
     interval = interval_var.get()
+    capital = float(capital_var.get())
     df = fetch_binance_klines(symbol, interval)
     plt.figure()
     for name, var in strategy_vars.items():
         if var.get():
             curve = STRATEGIES[name](df)
-            plt.plot(curve.index, curve.values, label=name)
+            times = pd.to_datetime(df["close_time"].iloc[-len(curve):], unit="ms")
+            capital_curve = capital + curve.values
+            plt.plot(times, capital_curve, label=name)
+            max_idx = capital_curve.argmax()
+            min_idx = capital_curve.argmin()
+            plt.scatter(times.iloc[max_idx], capital_curve[max_idx], color="green")
+            plt.scatter(times.iloc[min_idx], capital_curve[min_idx], color="orange")
+            if (capital_curve <= 0).any():
+                b_idx = (capital_curve <= 0).argmax()
+                plt.axvline(times.iloc[b_idx], color="red", linestyle="--")
     plt.title(f"Backtest on {symbol} ({interval})")
-    plt.xlabel("Steps")
-    plt.ylabel("PnL")
+    plt.xlabel("Time")
+    plt.ylabel("Capital")
     plt.legend()
     plt.grid(True)
     plt.show()
@@ -39,10 +50,16 @@ interval_var = tk.StringVar(value="15m")
 entry_interval = ttk.Entry(frm, textvariable=interval_var)
 entry_interval.grid(column=1, row=1, sticky=tk.W)
 
+# Capital
+ttk.Label(frm, text="Capital:").grid(column=0, row=2, sticky=tk.W)
+capital_var = tk.StringVar(value="1000")
+entry_capital = ttk.Entry(frm, textvariable=capital_var)
+entry_capital.grid(column=1, row=2, sticky=tk.W)
+
 # Strategy checkboxes
-ttk.Label(frm, text="Strategies:").grid(column=0, row=2, sticky=tk.W)
+ttk.Label(frm, text="Strategies:").grid(column=0, row=3, sticky=tk.W)
 strategy_vars = {}
-row = 3
+row = 4
 for name in STRATEGIES.keys():
     var = tk.BooleanVar()
     chk = ttk.Checkbutton(frm, text=name, variable=var)
